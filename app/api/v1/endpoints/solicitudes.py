@@ -2,11 +2,77 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_usuario, get_db
-from app.crud import crud_pago, crud_servicio, crud_solicitud
+from app.core.config import settings
+from app.core.email import enviar_correo
+from app.crud import crud_error_log, crud_pago, crud_servicio, crud_solicitud
 from app.models.usuario import Usuario
 from app.schemas.solicitud import Solicitud, SolicitudCrear
 
 router = APIRouter(tags=["solicitudes"])
+
+
+def _enviar_correo_nueva_solicitud(db: Session, solicitud) -> None:
+    """Le avisa al trabajador que le llegó una solicitud nueva, para que no
+    dependa de entrar a revisar el panel. Nunca deja que un problema de
+    envío tumbe la petición (igual que en registro/olvide-contraseña): si
+    falla, queda registrado en la pestaña "Errores" del panel de admin."""
+    trabajador = solicitud.servicio.usuario if solicitud.servicio else None
+    if trabajador is None:
+        return
+    enlace = f"{settings.frontend_url_principal}/cuenta"
+    try:
+        enviar_correo(
+            trabajador.correo,
+            "Nueva solicitud de servicio — Voz Profesional",
+            (
+                f"<p>Hola {trabajador.nombre},</p>"
+                f"<p><strong>{solicitud.cliente.nombre} {solicitud.cliente.apellido}</strong> "
+                f"solicitó tu servicio \"{solicitud.servicio.titulo}\".</p>"
+                + (f"<p>Mensaje: \"{solicitud.mensaje}\"</p>" if solicitud.mensaje else "")
+                + f"<p>Contacto: {solicitud.cliente.correo} · {solicitud.cliente.celular}</p>"
+                f'<p>Entra a <a href="{enlace}">tu cuenta</a> para responderle.</p>'
+            ),
+        )
+    except Exception as exc:
+        db.rollback()
+        crud_error_log.registrar(
+            db,
+            metodo="POST",
+            ruta=f"/api/v1/servicios/{solicitud.id_servicio}/solicitar",
+            tipo_error=type(exc).__name__,
+            mensaje=str(exc),
+            traceback=None,
+        )
+
+
+def _enviar_correo_solicitud_atendida(db: Session, solicitud) -> None:
+    """Le avisa al cliente que el trabajador ya vio su solicitud y lo va a
+    contactar. Misma política de no romper nada si el envío falla."""
+    trabajador = solicitud.servicio.usuario if solicitud.servicio else None
+    if solicitud.cliente is None or trabajador is None:
+        return
+    enlace = f"{settings.frontend_url_principal}/cuenta"
+    try:
+        enviar_correo(
+            solicitud.cliente.correo,
+            "Tu solicitud fue atendida — Voz Profesional",
+            (
+                f"<p>Hola {solicitud.cliente.nombre},</p>"
+                f"<p><strong>{trabajador.nombre} {trabajador.apellido}</strong> ya vio tu solicitud "
+                f"para \"{solicitud.servicio.titulo}\" y se va a poner en contacto contigo pronto.</p>"
+                f'<p>Puedes ver el estado en <a href="{enlace}">tu cuenta</a>.</p>'
+            ),
+        )
+    except Exception as exc:
+        db.rollback()
+        crud_error_log.registrar(
+            db,
+            metodo="PATCH",
+            ruta=f"/api/v1/solicitudes/{solicitud.id}/atender",
+            tipo_error=type(exc).__name__,
+            mensaje=str(exc),
+            traceback=None,
+        )
 
 
 def _a_solicitud(s) -> Solicitud:
@@ -51,7 +117,9 @@ def solicitar_servicio(
         raise HTTPException(status_code=400, detail="No puedes solicitar tu propio servicio")
 
     solicitud = crud_solicitud.crear(db, data, id_cliente=usuario.id, id_servicio=id_servicio)
-    return _a_solicitud(crud_solicitud.obtener(db, solicitud.id))
+    solicitud_completa = crud_solicitud.obtener(db, solicitud.id)
+    _enviar_correo_nueva_solicitud(db, solicitud_completa)
+    return _a_solicitud(solicitud_completa)
 
 
 @router.get("/solicitudes/mias", response_model=list[Solicitud])
@@ -85,7 +153,9 @@ def atender_solicitud(
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
     if solicitud.servicio.id_usuario != usuario.id:
         raise HTTPException(status_code=403, detail="Esta solicitud no es tuya")
-    return _a_solicitud(crud_solicitud.marcar_atendida(db, solicitud))
+    solicitud_atendida = crud_solicitud.marcar_atendida(db, solicitud)
+    _enviar_correo_solicitud_atendida(db, solicitud_atendida)
+    return _a_solicitud(solicitud_atendida)
 
 
 @router.patch("/solicitudes/{id_solicitud}/completar", response_model=Solicitud)
