@@ -221,6 +221,13 @@ def actualizar_contrasena(db: Session, usuario: Usuario, nueva_contrasena_plana:
     return usuario
 
 
+def actualizar_datos_pago(db: Session, usuario: Usuario, datos_pago: str | None) -> Usuario:
+    usuario.datos_pago = datos_pago or None
+    db.commit()
+    db.refresh(usuario)
+    return usuario
+
+
 def eliminar(db: Session, usuario: Usuario) -> None:
     """Borra la cuenta y TODO su rastro de forma permanente e irreversible
     (a diferencia de desactivar, que solo oculta la cuenta). Como ninguna

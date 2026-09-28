@@ -30,9 +30,17 @@ class Usuario(BaseModel):
     foto_url: str | None = None
     id_rol: int
     correo_verificado: bool = True
+    datos_pago: str | None = None
 
     class Config:
         from_attributes = True
+
+
+class ActualizarDatosPago(BaseModel):
+    """Numero de Nequi o llave Bancolombia del trabajador. Se puede dejar
+    vacio (None) para borrarlo: no es obligatorio tener uno."""
+
+    datos_pago: str | None = None
 
 
 class TrabajadorMapa(BaseModel):

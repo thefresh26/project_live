@@ -18,7 +18,7 @@ from app.core.uploads import guardar_foto_perfil
 from app.crud import crud_email_verification, crud_error_log, crud_password_reset, crud_usuario
 from app.schemas.email_verification import ReenviarVerificacion, VerificarCorreo
 from app.schemas.password_reset import RestablecerContrasena, SolicitarRecuperacion
-from app.schemas.usuario import LoginRequest, RegistroTrabajador, Token, Usuario
+from app.schemas.usuario import ActualizarDatosPago, LoginRequest, RegistroTrabajador, Token, Usuario
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -220,3 +220,15 @@ def yo(usuario=Depends(get_current_usuario)):
     """El perfil de la sesión actual (Cliente o Trabajador). Sirve para que
     el frontend sepa, por ejemplo, si todavía falta verificar el correo."""
     return usuario
+
+
+@router.patch("/datos-pago", response_model=Usuario)
+def actualizar_datos_pago(
+    data: ActualizarDatosPago,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_usuario),
+):
+    """El usuario (como trabajador) guarda o cambia el numero de Nequi o
+    llave Bancolombia donde quiere que le paguen. No es obligatorio: se
+    puede dejar vacio para borrarlo."""
+    return crud_usuario.actualizar_datos_pago(db, usuario, data.datos_pago)

@@ -21,7 +21,7 @@ def listar_recibidas_por_trabajador(db: Session, id_trabajador: int) -> list[Sol
         .join(Servicio, Solicitud.id_servicio == Servicio.id)
         .options(
             joinedload(Solicitud.cliente),
-            joinedload(Solicitud.servicio),
+            joinedload(Solicitud.servicio).joinedload(Servicio.usuario),
             joinedload(Solicitud.pago),
         )
         .filter(Servicio.id_usuario == id_trabajador)
@@ -35,7 +35,7 @@ def obtener(db: Session, id_solicitud: int) -> Solicitud | None:
         db.query(Solicitud)
         .options(
             joinedload(Solicitud.cliente),
-            joinedload(Solicitud.servicio),
+            joinedload(Solicitud.servicio).joinedload(Servicio.usuario),
             joinedload(Solicitud.pago),
         )
         .filter(Solicitud.id == id_solicitud)
@@ -50,7 +50,7 @@ def listar_hechas_por_cliente(db: Session, id_cliente: int) -> list[Solicitud]:
         db.query(Solicitud)
         .options(
             joinedload(Solicitud.cliente),
-            joinedload(Solicitud.servicio),
+            joinedload(Solicitud.servicio).joinedload(Servicio.usuario),
             joinedload(Solicitud.pago),
         )
         .filter(Solicitud.id_cliente == id_cliente)

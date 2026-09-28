@@ -176,6 +176,16 @@ def crear_tablas():
         conexion.execute(
             text("ALTER TABLE solicitud ADD COLUMN IF NOT EXISTS completada BOOLEAN NOT NULL DEFAULT FALSE")
         )
+        # Numero de Nequi / llave Bancolombia del trabajador (sistema de
+        # pagos con transferencia directa). Opcional, no todos lo llenan.
+        conexion.execute(
+            text("ALTER TABLE usuario ADD COLUMN IF NOT EXISTS datos_pago VARCHAR")
+        )
+        # La tabla "pago" se creo con un intento anterior (pasarela Wompi)
+        # donde "referencia" era obligatoria; ahora ya no se usa (pagos por
+        # transferencia directa), asi que se relaja esa restriccion para que
+        # los nuevos registros no fallen al no traer ese dato.
+        conexion.execute(text("ALTER TABLE pago ALTER COLUMN referencia DROP NOT NULL"))
 
     # Siembra las categorías base la primera vez que arranca el backend,
     # para que el frontend no dependa de datos de ejemplo (contenido.js).

@@ -20,17 +20,6 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     correo_remitente: str = "Voz Profesional <onboarding@resend.dev>"
 
-    # Pasarela de pagos Wompi. Vacías hasta que se cree la cuenta en
-    # comercios.wompi.co y se copien las llaves reales (sandbox primero,
-    # luego producción); mientras tanto los endpoints de pago responden
-    # con un error explícito en vez de fallar en silencio (ver
-    # app/core/wompi.py y app/api/v1/endpoints/solicitudes.py).
-    # La llave pública SÍ viaja al frontend (así funciona el widget de
-    # Wompi); el secreto de integridad y el de eventos nunca salen del
-    # backend.
-    wompi_llave_publica: str = ""
-    wompi_secreto_integridad: str = ""
-    wompi_secreto_eventos: str = ""
 
     class Config:
         env_file = ".env"

@@ -2,17 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_usuario, get_db
-from app.core.config import settings
-from app.core.wompi import firma_integridad, monto_en_centavos
 from app.crud import crud_pago, crud_servicio, crud_solicitud
 from app.models.usuario import Usuario
-from app.schemas.pago import DatosCheckoutWompi
 from app.schemas.solicitud import Solicitud, SolicitudCrear
 
 router = APIRouter(tags=["solicitudes"])
 
 
 def _a_solicitud(s) -> Solicitud:
+    trabajador = s.servicio.usuario if s.servicio else None
     return Solicitud(
         id=s.id,
         id_servicio=s.id_servicio,
@@ -20,11 +18,14 @@ def _a_solicitud(s) -> Solicitud:
         nombre_cliente=f"{s.cliente.nombre} {s.cliente.apellido}".strip() if s.cliente else "",
         correo_cliente=s.cliente.correo if s.cliente else "",
         celular_cliente=s.cliente.celular if s.cliente else "",
+        nombre_trabajador=f"{trabajador.nombre} {trabajador.apellido}".strip() if trabajador else "",
+        celular_trabajador=trabajador.celular if trabajador else "",
         mensaje=s.mensaje,
         atendida=s.atendida,
         completada=s.completada,
         estado_pago=s.pago.estado if s.pago else None,
         monto_pago=s.pago.monto if s.pago else None,
+        datos_pago_trabajador=(trabajador.datos_pago if s.completada and trabajador else None),
         creado_en=s.creado_en,
     )
 
@@ -68,7 +69,8 @@ def mis_solicitudes_hechas(
     usuario: Usuario = Depends(get_current_usuario),
 ):
     """Solicitudes que el usuario logueado ha hecho como cliente, para ver
-    su estado y, si el trabajador ya la marcó como completada, pagar."""
+    su estado y, si el trabajador ya la marcó como completada, pagarle
+    directo por Nequi/Bancolombia."""
     return [_a_solicitud(s) for s in crud_solicitud.listar_hechas_por_cliente(db, usuario.id)]
 
 
@@ -94,8 +96,8 @@ def completar_solicitud(
 ):
     """El trabajador confirma que ya hizo el trabajo. Esto crea el cobro
     (Pago) por el precio_desde del servicio; el trabajador no puede elegir
-    ni cambiar ese monto. El cliente ve el estado en 'Mis solicitudes' y
-    paga desde ahí con Wompi."""
+    ni cambiar ese monto. El cliente ve en 'Mis solicitudes' el numero de
+    Nequi/llave del trabajador para transferirle directo."""
     solicitud = crud_solicitud.obtener(db, id_solicitud)
     if solicitud is None:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
@@ -114,14 +116,15 @@ def completar_solicitud(
     return _a_solicitud(solicitud)
 
 
-@router.get("/solicitudes/{id_solicitud}/pago", response_model=DatosCheckoutWompi)
-def obtener_datos_de_pago(
+@router.patch("/solicitudes/{id_solicitud}/reportar-pago", response_model=Solicitud)
+def reportar_pago(
     id_solicitud: int,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_usuario),
 ):
-    """Lo que el cliente necesita para abrir el Web Checkout de Wompi y
-    pagar el servicio ya completado."""
+    """El cliente marca que ya le transfirió al trabajador. Todavía falta
+    que el trabajador confirme que de verdad le llegó (ver
+    confirmar_pago)."""
     solicitud = crud_solicitud.obtener(db, id_solicitud)
     if solicitud is None:
         raise HTTPException(status_code=404, detail="Solicitud no encontrada")
@@ -131,20 +134,29 @@ def obtener_datos_de_pago(
         raise HTTPException(
             status_code=400, detail="El trabajador todavía no marcó este servicio como completado"
         )
-    if not settings.wompi_llave_publica or not settings.wompi_secreto_integridad:
+    if solicitud.pago.estado != "pendiente":
+        raise HTTPException(status_code=400, detail="Ya habías reportado este pago")
+
+    crud_pago.marcar_reportado(db, solicitud.pago)
+    return _a_solicitud(crud_solicitud.obtener(db, id_solicitud))
+
+
+@router.patch("/solicitudes/{id_solicitud}/confirmar-pago", response_model=Solicitud)
+def confirmar_pago(
+    id_solicitud: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_usuario),
+):
+    """El trabajador confirma que el dinero ya le llegó a su Nequi/cuenta."""
+    solicitud = crud_solicitud.obtener(db, id_solicitud)
+    if solicitud is None:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    if solicitud.servicio.id_usuario != usuario.id:
+        raise HTTPException(status_code=403, detail="Esta solicitud no es tuya")
+    if solicitud.pago is None or solicitud.pago.estado != "reportado":
         raise HTTPException(
-            status_code=503,
-            detail="Los pagos todavía no están configurados. Contacta al administrador.",
+            status_code=400, detail="El cliente todavía no ha reportado que hizo el pago"
         )
 
-    pago = crud_pago.regenerar_referencia_si_fallo(db, solicitud.pago)
-    centavos = monto_en_centavos(pago.monto)
-    return DatosCheckoutWompi(
-        llave_publica=settings.wompi_llave_publica,
-        referencia=pago.referencia,
-        monto_en_centavos=centavos,
-        moneda=pago.moneda,
-        firma_integridad=firma_integridad(
-            referencia=pago.referencia, monto_en_centavos=centavos, moneda=pago.moneda
-        ),
-    )
+    crud_pago.marcar_confirmado(db, solicitud.pago)
+    return _a_solicitud(crud_solicitud.obtener(db, id_solicitud))

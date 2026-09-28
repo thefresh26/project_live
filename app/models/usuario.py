@@ -24,6 +24,11 @@ class Usuario(Base):
     # (ver la migracion ALTER TABLE en main.py); las nuevas empiezan en
     # False y se verifican con el enlace que llega por correo al registrarse.
     correo_verificado = Column(Boolean, nullable=False, default=False)
+    # Numero de Nequi o llave Bancolombia (u otro dato equivalente) que el
+    # propio trabajador escribe para que le paguen directo cuando complete
+    # un servicio. Opcional: nadie esta obligado a llenarlo, y lo puede
+    # cambiar cuando quiera desde "Mi cuenta".
+    datos_pago = Column(String, nullable=True)
     id_rol = Column(Integer, ForeignKey("rol.id"), nullable=False)
 
     rol = relationship("Rol", back_populates="usuarios")
