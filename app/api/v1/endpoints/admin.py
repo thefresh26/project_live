@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from sqlalchemy.orm import Session
 
@@ -125,6 +126,25 @@ def eliminar_usuario(
     if usuario is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     crud_usuario.eliminar(db, usuario)
+
+
+class NuevaContrasena(BaseModel):
+    contrasena: str = Field(min_length=8)
+
+
+@router.patch("/usuarios/{id_usuario}/contrasena", status_code=204)
+def cambiar_contrasena_usuario(
+    id_usuario: int,
+    data: NuevaContrasena,
+    db: Session = Depends(get_db),
+    _admin: Usuario = Depends(requerir_administrador),
+):
+    """Recuperación asistida: el administrador fija una contraseña nueva
+    cuando el usuario no puede usar el correo de recuperación."""
+    usuario = crud_usuario.obtener(db, id_usuario)
+    if usuario is None:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    crud_usuario.actualizar_contrasena(db, usuario, data.contrasena)
 
 
 @router.patch("/usuarios/{id_usuario}/reactivar", response_model=UsuarioAdmin)
