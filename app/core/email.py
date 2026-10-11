@@ -42,6 +42,9 @@ def enviar_correo(destinatario: str, asunto: str, html: str) -> bool:
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            # Sin User-Agent propio, Cloudflare (delante de Resend) rechaza con 403 / código 1010
+            # el "Python-urllib" por defecto.
+            "User-Agent": "voz-profesional/1.0",
         },
     )
     try:
