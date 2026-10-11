@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_usuario, get_db
 from app.core.uploads import guardar_foto_perfil
-from app.crud import crud_calificacion, crud_servicio
+from app.crud import crud_calificacion, crud_categoria, crud_servicio
 from app.models.servicio import Servicio
 from app.models.usuario import Usuario
 from app.schemas.servicio import ServicioConCategoria, ServicioCrear
@@ -70,13 +71,20 @@ async def crear_servicio(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_current_usuario),
 ):
-    data = ServicioCrear(
-        id_categoria=id_categoria,
-        titulo=titulo,
-        descripcion=descripcion,
-        precio_desde=precio_desde,
-        disponibilidad=disponibilidad,
-    )
+    try:
+        data = ServicioCrear(
+            id_categoria=id_categoria,
+            titulo=titulo,
+            descripcion=descripcion,
+            precio_desde=precio_desde,
+            disponibilidad=disponibilidad,
+        )
+    except ValidationError as exc:
+        primero = exc.errors()[0]
+        campo = primero["loc"][-1] if primero.get("loc") else "datos"
+        raise HTTPException(status_code=422, detail=f"Dato inválido ({campo}): {primero['msg']}")
+    if crud_categoria.obtener(db, data.id_categoria) is None:
+        raise HTTPException(status_code=400, detail="La categoría elegida no existe")
     foto_url = await guardar_foto_perfil(foto)
     servicio = crud_servicio.crear(db, data, id_usuario=usuario.id, foto_url=foto_url)
     return _a_servicio_con_categoria(db, servicio)

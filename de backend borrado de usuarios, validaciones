@@ -1,0 +1,11 @@
+warning: in the working copy of 'app/api/deps.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/api/v1/endpoints/auth.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/api/v1/endpoints/servicios.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/crud/crud_usuario.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/schemas/servicio.py', LF will be replaced by CRLF the next time Git touches it
+ app/api/deps.py                   |  2 [32m+[m[31m-[m
+ app/api/v1/endpoints/auth.py      | 33 [32m+++++++++++++++++++++[m[31m------------[m
+ app/api/v1/endpoints/servicios.py | 24 [32m++++++++++++++++[m[31m--------[m
+ app/crud/crud_usuario.py          | 15 [32m+++++++++++[m[31m----[m
+ app/schemas/servicio.py           |  4 [32m++[m[31m--[m
+ 5 files changed, 51 insertions(+), 27 deletions(-)

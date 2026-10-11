@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_usuario, get_db
@@ -38,18 +39,23 @@ async def registro(
     foto: UploadFile | None = File(None),
     db: Session = Depends(get_db),
 ):
-    data = RegistroTrabajador(
-        nombre=nombre,
-        apellido=apellido,
-        correo=correo,
-        contrasena=contrasena,
-        cedula=cedula,
-        celular=celular,
-        ciudad=ciudad,
-        direccion=direccion,
-        latitud=latitud,
-        longitud=longitud,
-    )
+    try:
+        data = RegistroTrabajador(
+            nombre=nombre,
+            apellido=apellido,
+            correo=correo,
+            contrasena=contrasena,
+            cedula=cedula,
+            celular=celular,
+            ciudad=ciudad,
+            direccion=direccion,
+            latitud=latitud,
+            longitud=longitud,
+        )
+    except ValidationError as exc:
+        primero = exc.errors()[0]
+        campo = primero["loc"][-1] if primero.get("loc") else "datos"
+        raise HTTPException(status_code=422, detail=f"Dato inválido ({campo}): {primero['msg']}")
     if crud_usuario.get_by_correo(db, data.correo):
         raise HTTPException(status_code=400, detail="Ese correo ya está registrado")
     if crud_usuario.get_by_cedula(db, data.cedula):
@@ -108,6 +114,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     if not usuario or not verify_password(data.contrasena, usuario.contrasena):
         registrar_intento_fallido(data.correo)
         raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos")
+
+    if not usuario.activo:
+        raise HTTPException(status_code=403, detail="Tu cuenta está desactivada. Contacta al administrador.")
 
     limpiar_intentos(data.correo)
     token = create_access_token({"sub": str(usuario.id)})

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.categoria import Categoria
 
@@ -9,7 +9,7 @@ class ServicioCrear(BaseModel):
     id_categoria: int
     titulo: str
     descripcion: str | None = None
-    precio_desde: float | None = None
+    precio_desde: float | None = Field(default=None, ge=0)
     disponibilidad: str | None = None
 
 

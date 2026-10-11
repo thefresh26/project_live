@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session, joinedload
 from app.core.security import hash_password
 from app.models.calificacion import Calificacion
 from app.models.denuncia_trabajador import DenunciaTrabajador
+from app.models.email_verification_token import EmailVerificationToken
+from app.models.pago import Pago
+from app.models.password_reset_token import PasswordResetToken
 from app.models.reporte_formulario import ReporteFormulario
 from app.models.rol import Rol
 from app.models.servicio import Servicio
@@ -13,7 +16,7 @@ from app.schemas.usuario import RegistroTrabajador
 
 
 def get_by_correo(db: Session, correo: str) -> Usuario | None:
-    return db.query(Usuario).filter(Usuario.correo == correo).first()
+    return db.query(Usuario).filter(func.lower(Usuario.correo) == correo.strip().lower()).first()
 
 
 def get_by_cedula(db: Session, cedula: str) -> Usuario | None:
@@ -255,9 +258,13 @@ def eliminar(db: Session, usuario: Usuario) -> None:
             synchronize_session=False
         )
 
-    db.query(Solicitud).filter(
-        (Solicitud.id_cliente == usuario.id) | (Solicitud.id_servicio.in_(ids_servicios or [-1]))
-    ).delete(synchronize_session=False)
+    condicion_solicitudes = (Solicitud.id_cliente == usuario.id) | (Solicitud.id_servicio.in_(ids_servicios or [-1]))
+    ids_solicitudes = [i for (i,) in db.query(Solicitud.id).filter(condicion_solicitudes).all()]
+    if ids_solicitudes:
+        db.query(Pago).filter(Pago.id_solicitud.in_(ids_solicitudes)).delete(synchronize_session=False)
+    db.query(Solicitud).filter(condicion_solicitudes).delete(synchronize_session=False)
+    db.query(PasswordResetToken).filter(PasswordResetToken.id_usuario == usuario.id).delete(synchronize_session=False)
+    db.query(EmailVerificationToken).filter(EmailVerificationToken.id_usuario == usuario.id).delete(synchronize_session=False)
 
     db.query(DenunciaTrabajador).filter(
         (DenunciaTrabajador.id_denunciante == usuario.id) | (DenunciaTrabajador.id_trabajador == usuario.id)
